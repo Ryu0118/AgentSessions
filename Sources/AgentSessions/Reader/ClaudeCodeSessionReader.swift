@@ -122,7 +122,8 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
             let content = extractContent(from: entry)
             return content.isEmpty ? nil : content
         }
-        let lastUserMessage = MessageFilter.lastMeaningful(userMessages)
+        let decodedMessages = userMessages.map { ClaudeCodeContentDecoder.decode($0) }
+        let lastUserMessage = MessageFilter.lastMeaningful(decodedMessages)
 
         let lastMessageAt = FileSystemHelper.fileModificationDate(file, fileSystem: fileSystem)
 

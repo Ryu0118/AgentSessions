@@ -8,6 +8,8 @@ private enum ClaudeCodeTag: String, CaseIterable, Sendable {
     case commandArgs = "command-args"
     case localCommandCaveat = "local-command-caveat"
     case localCommandStdout = "local-command-stdout"
+    case bashStdout = "bash-stdout"
+    case bashStderr = "bash-stderr"
     case taskNotification = "task-notification"
     case summary
     case result
@@ -18,6 +20,7 @@ private enum ClaudeCodeDecodedLabel: String, CaseIterable, Sendable {
     case command = "[Command]"
     case localCommandOutput = "[Local command output — do not respond unless explicitly asked]"
     case stdout = "[stdout]"
+    case stderr = "[stderr]"
     case subagent = "[Subagent]"
     case subagentNotification = "[Subagent notification]"
 }
@@ -28,6 +31,8 @@ private enum SystemNoisePrefix: String, CaseIterable, Sendable {
     case userInfo = "<user_info>"
     case permissions = "<permissions "
     case agentsMd = "# AGENTS.md"
+    case bashStdout = "<bash-stdout>"
+    case bashStderr = "<bash-stderr>"
 }
 
 /// Filters system-injected noise from message previews and fallback content.
@@ -99,6 +104,18 @@ private enum TagRegex {
         Capture { ZeroOrMore(.any, .reluctant) }
         "</local-command-stdout>"
     }.dotMatchesNewlines()
+
+    nonisolated(unsafe) static let bashStdout = Regex {
+        "<bash-stdout>"
+        Capture { ZeroOrMore(.any, .reluctant) }
+        "</bash-stdout>"
+    }.dotMatchesNewlines()
+
+    nonisolated(unsafe) static let bashStderr = Regex {
+        "<bash-stderr>"
+        Capture { ZeroOrMore(.any, .reluctant) }
+        "</bash-stderr>"
+    }.dotMatchesNewlines()
 }
 
 /// Decodes Claude Code's internal XML structures into AI-friendly plain text.
@@ -110,6 +127,8 @@ public enum ClaudeCodeContentDecoder: Sendable {
         result = decodeCommandBlock(result)
         result = decodeLocalCommandCaveat(result)
         result = decodeLocalCommandStdout(result)
+        result = decodeBashStdout(result)
+        result = decodeBashStderr(result)
         return result
     }
 
@@ -163,6 +182,18 @@ public enum ClaudeCodeContentDecoder: Sendable {
     private static func decodeLocalCommandStdout(_ text: String) -> String {
         text.replacing(TagRegex.localCommandStdout) { match in
             "\(ClaudeCodeDecodedLabel.stdout.rawValue)\n\(match.output.1)"
+        }
+    }
+
+    private static func decodeBashStdout(_ text: String) -> String {
+        text.replacing(TagRegex.bashStdout) { match in
+            "\(ClaudeCodeDecodedLabel.stdout.rawValue)\n\(match.output.1)"
+        }
+    }
+
+    private static func decodeBashStderr(_ text: String) -> String {
+        text.replacing(TagRegex.bashStderr) { match in
+            "\(ClaudeCodeDecodedLabel.stderr.rawValue)\n\(match.output.1)"
         }
     }
 }

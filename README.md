@@ -4,11 +4,9 @@ A Swift library to read and parse conversation sessions from AI coding agents.
 
 ## Supported Agents
 
-| Agent | Storage Format | Reader |
-|-------|---------------|--------|
-| [Claude Code](https://claude.ai/claude-code) | JSONL (`~/.claude/projects/`) | `ClaudeCodeSessionReader` |
-| [Codex](https://github.com/openai/codex) | JSONL (`~/.codex/sessions/`) | `CodexSessionReader` |
-| [Cursor](https://cursor.com) | SQLite + JSONL (`~/.cursor/`) | `CursorSessionReader` |
+- Claude Code
+- Codex
+- Cursor
 
 ## Usage
 

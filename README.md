@@ -51,7 +51,7 @@ AgentSessions/
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/Ryu0118/swift-agent-sessions.git", from: "0.1.0"),
+    .package(url: "https://github.com/Ryu0118/AgentSessions.git", from: "0.1.0"),
 ]
 ```
 
@@ -59,7 +59,7 @@ dependencies: [
 .target(
     name: "YourTarget",
     dependencies: [
-        .product(name: "AgentSessions", package: "swift-agent-sessions"),
+        .product(name: "AgentSessions", package: "AgentSessions"),
     ]
 )
 ```

@@ -12,9 +12,19 @@ public struct CodexSessionReader: SessionReader, Sendable {
         baseDir: URL? = nil
     ) {
         self.fileSystem = fileSystem
-        self.baseDir = baseDir ?? fileSystem.homeDirectoryForCurrentUser
-            .appendingPathComponent(".codex/sessions")
+        let home = fileSystem.homeDirectoryForCurrentUser
+        self.baseDir = baseDir ?? Self.resolveBaseDir(home: home, fileSystem: fileSystem)
         fileReader = JSONLFileReader(fileSystem: fileSystem)
+    }
+
+    /// Snap-packaged Codex remaps HOME to `~/snap/codex/<rev>/`, so sessions live there.
+    /// Detect snap by checking if `~/snap/codex/` exists.
+    private static func resolveBaseDir(home: URL, fileSystem: any FileSystemProtocol) -> URL {
+        let snapDir = home.appendingPathComponent("snap/codex")
+        if fileSystem.fileExists(atPath: snapDir.path) {
+            return home.appendingPathComponent("snap/codex/current/.codex/sessions")
+        }
+        return home.appendingPathComponent(".codex/sessions")
     }
 
     public func listSessions() async throws -> [SessionSummary] {

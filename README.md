@@ -29,22 +29,6 @@ for message in conversation?.messages ?? [] {
 }
 ```
 
-## Architecture
-
-```
-AgentSessions/
-├── AgentSource             — Agent identifier enum
-├── UnifiedConversation     — Normalized conversation/message types
-├── SessionSummary          — Lightweight session metadata
-├── SessionReader           — Protocol for reading sessions
-├── SessionReaderFactory    — Creates readers for all supported agents
-├── DateUtils               — ISO 8601 parsing
-├── Schema/                 — Agent-specific JSONL/DB schemas
-├── Reader/                 — Agent-specific SessionReader implementations
-├── Decoder/                — Agent-specific content decoders
-└── Internal/               — File system, SQLite, JSONL infrastructure
-```
-
 ## Installation
 
 ### Swift Package Manager

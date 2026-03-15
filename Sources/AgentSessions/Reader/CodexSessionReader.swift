@@ -17,10 +17,14 @@ public struct CodexSessionReader: SessionReader, Sendable {
         fileReader = JSONLFileReader(fileSystem: fileSystem)
     }
 
-    /// Snap-packaged Codex remaps $HOME to ~/snap/codex/<rev>/, so codex_home = $HOME
-    /// and sessions live at $HOME/sessions/ (no .codex prefix).
-    /// Detect snap by checking if ~/snap/codex/ exists.
+    /// Resolves the Codex sessions directory following the same logic as Codex itself:
+    /// 1. `CODEX_HOME` env var → `$CODEX_HOME/sessions/`
+    /// 2. Snap-packaged Codex (~/snap/codex/ exists) → `~/snap/codex/current/sessions/`
+    /// 3. Default → `~/.codex/sessions/`
     private static func resolveBaseDir(home: URL, fileSystem: any FileSystemProtocol) -> URL {
+        if let codexHome = ProcessInfo.processInfo.environment["CODEX_HOME"], !codexHome.isEmpty {
+            return URL(fileURLWithPath: codexHome).appendingPathComponent("sessions")
+        }
         let snapDir = home.appendingPathComponent("snap/codex")
         if fileSystem.fileExists(atPath: snapDir.path) {
             return home.appendingPathComponent("snap/codex/current/sessions")

@@ -10,6 +10,9 @@ let package = Package(
     products: [
         .library(name: "AgentSessions", targets: ["AgentSessions"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/mtj0928/swift-async-operations.git", from: "0.5.0"),
+    ],
     targets: [
         .systemLibrary(
             name: "CSQLite",
@@ -21,6 +24,7 @@ let package = Package(
             name: "AgentSessions",
             dependencies: [
                 "CSQLite",
+                .product(name: "AsyncOperations", package: "swift-async-operations"),
             ]
         ),
         .testTarget(

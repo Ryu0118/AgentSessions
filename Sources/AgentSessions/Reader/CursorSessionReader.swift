@@ -60,6 +60,13 @@ public struct CursorSessionReader: SessionReader, Sendable {
         public let name: String?
         public let createdAt: Date?
         public let lastUsedModel: String?
+
+        public init(agentId: String, name: String?, createdAt: Date?, lastUsedModel: String?) {
+            self.agentId = agentId
+            self.name = name
+            self.createdAt = createdAt
+            self.lastUsedModel = lastUsedModel
+        }
     }
 
     private struct MetadataRow {

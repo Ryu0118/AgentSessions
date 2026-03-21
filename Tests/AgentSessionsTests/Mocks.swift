@@ -115,6 +115,19 @@ enum TestFixtures {
         """
     }
 
+    /// JSONL where the on-disk filename is a UUID but `sessionId` in the file is the CLI resume string (slug).
+    static func claudeCodeJSONLWithResumeSlug(
+        fileUUID: String = "550e8400-e29b-41d4-a716-446655440000",
+        resumeSlug: String = "memorinia-mcp-apps-rollout",
+        timestamp: String = "2024-03-09T00:00:00.000Z"
+    ) -> String {
+        """
+        {"type":"progress","sessionId":"\(resumeSlug)","timestamp":"\(timestamp)"}
+        {"type":"user","message":{"role":"user","content":"Hello world"},"timestamp":"\(timestamp)","version":"1"}
+        {"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hi! How can I help?"}]},"model":"claude-3","timestamp":"\(timestamp)"}
+        """
+    }
+
     // Codex JSONL lines
     static func codexJSONL(sessionId: String = "codex-session-1", timestamp: String = "2024-03-09T00:00:00.000Z") -> String {
         """

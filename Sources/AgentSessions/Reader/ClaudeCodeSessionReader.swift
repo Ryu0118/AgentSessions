@@ -54,13 +54,28 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
             at: baseDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
         )
 
-        for sessionFile in try sessionFiles(in: projectDirs) where sessionFile.file.deletingPathExtension().lastPathComponent == id {
+        let sessionFiles = try sessionFiles(in: projectDirs)
+
+        // 1) Filename stem (UUID or legacy slug-as-filename).
+        for sessionFile in sessionFiles where sessionFile.file.deletingPathExtension().lastPathComponent == id {
             return try conversation(
                 from: sessionFile.file,
                 sessionId: id,
                 projectPath: sessionFile.projectPath,
                 limit: limit
             )
+        }
+
+        // 2) JSON may carry the resume slug in `sessionId`, `customTitle`, or `agentName` while the filename is a UUID.
+        for sessionFile in sessionFiles {
+            if try file(sessionFile.file, hasSessionIdentifier: id) {
+                return try conversation(
+                    from: sessionFile.file,
+                    sessionId: id,
+                    projectPath: sessionFile.projectPath,
+                    limit: limit
+                )
+            }
         }
         return nil
     }
@@ -105,8 +120,11 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
 
     /// Builds a summary using head reads for metadata and tail reads for the latest user prompt.
     public func summary(for file: URL, projectPath: String?) throws -> SessionSummary {
-        let sessionId = file.deletingPathExtension().lastPathComponent
-        let headEntries = try readMetadataEntries(file: file)
+        let fileStem = file.deletingPathExtension().lastPathComponent
+        let resumeScan = try scanFrontResumeEntries(file: file)
+        let sessionId = preferredResumeDisplayId(from: resumeScan, fileStem: fileStem)
+        let rawHead = try readRawHeadEntries(file: file)
+        let headEntries = rawHead.filter { !shouldSkipEntry($0) }
         let meta = scanMetadata(entries: headEntries, projectPath: projectPath)
 
         // Read only the tail to avoid loading very large observer sessions just for the preview line.
@@ -174,14 +192,64 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
         return try parseMessages(fileReader.readAllEntries(from: file, as: ClaudeCodeEntry.self))
     }
 
-    private func readMetadataEntries(file: URL) throws -> [ClaudeCodeEntry] {
+    /// Head lines without filtering — metadata (cwd, model) from early user/assistant turns.
+    private func readRawHeadEntries(file: URL) throws -> [ClaudeCodeEntry] {
         try fileReader.readHeadEntries(
             from: file,
             as: ClaudeCodeEntry.self,
             maxBytes: 32768,
             maxLines: 50
         )
-        .filter { !shouldSkipEntry($0) }
+    }
+
+    private enum ResumeScanLimits {
+        /// Slug metadata (`custom-title`) can appear hundreds of lines in (after large snapshots).
+        static let maxBytes = 8 * 1024 * 1024
+        static let maxLines = 2000
+    }
+
+    /// Reads the front of the file far enough to capture `custom-title` / `agent-name` resume labels.
+    private func scanFrontResumeEntries(file: URL) throws -> [ClaudeCodeEntry] {
+        let data = try FileSystemHelper.readHead(fileSystem: fileSystem, file: file, maxBytes: ResumeScanLimits.maxBytes)
+        let text = String(decoding: data, as: UTF8.self)
+        let lines = text.split(whereSeparator: \.isNewline).prefix(ResumeScanLimits.maxLines)
+        return lines.compactMap { JSONLParser.decodeLine(String($0), as: ClaudeCodeEntry.self) }
+    }
+
+    private func readMetadataEntries(file: URL) throws -> [ClaudeCodeEntry] {
+        try readRawHeadEntries(file: file).filter { !shouldSkipEntry($0) }
+    }
+
+    /// Prefers `custom-title` / `agent-name`, then a `sessionId` that differs from the filename stem (slug-in-JSON).
+    private func preferredResumeDisplayId(from entries: [ClaudeCodeEntry], fileStem: String) -> String {
+        for entry in entries {
+            if entry.entryType == .customTitle, let title = entry.customTitle, !title.isEmpty {
+                return title
+            }
+        }
+        for entry in entries {
+            if entry.entryType == .agentName, let name = entry.agentName, !name.isEmpty {
+                return name
+            }
+        }
+        for entry in entries {
+            if let sid = entry.sessionId, !sid.isEmpty, sid != fileStem {
+                return sid
+            }
+        }
+        return fileStem
+    }
+
+    /// True when any scanned line carries the resume id on `sessionId`, `customTitle`, or `agentName`.
+    private func file(_ file: URL, hasSessionIdentifier id: String) throws -> Bool {
+        try scanFrontResumeEntries(file: file).contains { matchesResumeIdentifier(entry: $0, id: id) }
+    }
+
+    private func matchesResumeIdentifier(entry: ClaudeCodeEntry, id: String) -> Bool {
+        if entry.sessionId == id { return true }
+        if entry.customTitle == id { return true }
+        if entry.agentName == id { return true }
+        return false
     }
 
     private func parseMessages(_ entries: [ClaudeCodeEntry]) -> [UnifiedMessage] {
@@ -214,7 +282,12 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
 
     public func shouldSkipEntry(_ entry: ClaudeCodeEntry) -> Bool {
         // Progress and file-history snapshots are implementation noise, not user-visible conversation turns.
-        entry.entryType == .progress || entry.entryType == .fileHistorySnapshot
+        switch entry.entryType {
+        case .progress, .fileHistorySnapshot, .customTitle, .agentName:
+            return true
+        case .user, .assistant, .system, .none:
+            return false
+        }
     }
 
     public func extractRole(from entry: ClaudeCodeEntry) -> MessageRole? {

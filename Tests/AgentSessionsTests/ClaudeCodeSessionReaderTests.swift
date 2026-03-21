@@ -71,12 +71,9 @@ struct ClaudeCodeRoleTests {
     }
 
     @Test("identifies message roles", arguments: TestCase.allCases)
-    func extractRole(_ testCase: TestCase) {
+    func extractRole(_ testCase: TestCase) throws {
         let reader = ClaudeCodeSessionReaderTestSupport.makeStatelessReader()
-        guard let entry = ClaudeCodeSessionReaderTestSupport.decodeEntry(testCase.jsonl) else {
-            #expect(testCase.expected == nil)
-            return
-        }
+        let entry = try #require(ClaudeCodeSessionReaderTestSupport.decodeEntry(testCase.jsonl))
         #expect(reader.extractRole(from: entry) == testCase.expected)
     }
 }
@@ -115,12 +112,9 @@ struct ClaudeCodeContentTests {
     }
 
     @Test("extracts text content", arguments: TestCase.allCases)
-    func extractContent(_ testCase: TestCase) {
+    func extractContent(_ testCase: TestCase) throws {
         let reader = ClaudeCodeSessionReaderTestSupport.makeStatelessReader()
-        guard let entry = ClaudeCodeSessionReaderTestSupport.decodeEntry(testCase.jsonl) else {
-            #expect(testCase.expected == "")
-            return
-        }
+        let entry = try #require(ClaudeCodeSessionReaderTestSupport.decodeEntry(testCase.jsonl))
         #expect(reader.extractContent(from: entry) == testCase.expected)
     }
 }
@@ -143,12 +137,9 @@ struct ClaudeCodeSkipTests {
     }
 
     @Test("filters non-message entry types", arguments: TestCase.allCases)
-    func shouldSkip(_ testCase: TestCase) {
+    func shouldSkip(_ testCase: TestCase) throws {
         let reader = ClaudeCodeSessionReaderTestSupport.makeStatelessReader()
-        guard let entry = ClaudeCodeSessionReaderTestSupport.decodeEntry(testCase.jsonl) else {
-            Issue.record("Failed to decode JSONL: \(testCase.jsonl)")
-            return
-        }
+        let entry = try #require(ClaudeCodeSessionReaderTestSupport.decodeEntry(testCase.jsonl))
         #expect(reader.shouldSkipEntry(entry) == testCase.expected)
     }
 }
@@ -160,7 +151,7 @@ struct ClaudeCodeSessionTests {
         let fileSystem = MockFileManager()
         let baseDir = URL(fileURLWithPath: "/mock/claude/projects")
         let encodedProjectDirectory = "-Users-example-test"
-        let sessionID = "session-abc"
+        var sessionID = "session-abc"
 
         var projectDir: URL { baseDir.appendingPathComponent(encodedProjectDirectory) }
         var sessionFile: URL { projectDir.appendingPathComponent("\(sessionID).jsonl") }
@@ -207,10 +198,8 @@ struct ClaudeCodeSessionTests {
     func loadParsesMessages() async throws {
         var fixture = Fixture()
         fixture.configureSession()
-        let conversation = try await fixture.makeReader().loadSession(id: fixture.sessionID)
-
-        #expect(conversation != nil)
-        let messages = conversation!.messages
+        let conversation = try #require(try await fixture.makeReader().loadSession(id: fixture.sessionID))
+        let messages = conversation.messages
         #expect(messages.count == 4)
         #expect(messages[0] == .init(role: .user, content: "Hello world", timestamp: messages[0].timestamp))
         #expect(messages[1] == .init(role: .assistant, content: "Hi! How can I help?", timestamp: messages[1].timestamp))
@@ -222,14 +211,80 @@ struct ClaudeCodeSessionTests {
     func loadParsesMessagesWithLimit() async throws {
         var fixture = Fixture()
         fixture.configureSession()
-        let conversation = try await fixture.makeReader().loadSession(id: fixture.sessionID, limit: 2)
-
-        #expect(conversation != nil)
-        let messages = conversation!.messages
+        let conversation = try #require(
+            try await fixture.makeReader().loadSession(id: fixture.sessionID, limit: 2)
+        )
+        let messages = conversation.messages
         #expect(messages.count == 2)
         #expect(messages[0].role == .user)
         #expect(messages[0].content == "Thanks")
         #expect(messages[1].role == .assistant)
         #expect(messages[1].content == "You're welcome!")
+    }
+
+    @Test("listSessions uses sessionId from JSON when filename is a UUID (resume slug)")
+    func listUsesResumeSlugAsId() async throws {
+        let resumeSlug = "memorinia-mcp-apps-rollout"
+        let fileUUID = "550e8400-e29b-41d4-a716-446655440000"
+        var fixture = Fixture()
+        fixture.sessionID = fileUUID
+        fixture.configureSession(jsonl: TestFixtures.claudeCodeJSONLWithResumeSlug(fileUUID: fileUUID, resumeSlug: resumeSlug))
+
+        let sessions = try await fixture.makeReader().listSessions()
+        #expect(sessions.count == 1)
+        #expect(sessions[0].id == resumeSlug)
+    }
+
+    @Test("loadSession finds session by resume slug when JSONL filename is UUID")
+    func loadByResumeSlug() async throws {
+        let resumeSlug = "memorinia-mcp-apps-rollout"
+        let fileUUID = "550e8400-e29b-41d4-a716-446655440000"
+        var fixture = Fixture()
+        fixture.sessionID = fileUUID
+        fixture.configureSession(jsonl: TestFixtures.claudeCodeJSONLWithResumeSlug(fileUUID: fileUUID, resumeSlug: resumeSlug))
+
+        let conversation = try #require(try await fixture.makeReader().loadSession(id: resumeSlug))
+        #expect(conversation.id == resumeSlug)
+        #expect(conversation.messages.count == 2)
+    }
+
+    @Test("loadSession still resolves UUID filename when sessionId in JSON is slug")
+    func loadByUUIDFilename() async throws {
+        let resumeSlug = "memorinia-mcp-apps-rollout"
+        let fileUUID = "550e8400-e29b-41d4-a716-446655440000"
+        var fixture = Fixture()
+        fixture.sessionID = fileUUID
+        fixture.configureSession(jsonl: TestFixtures.claudeCodeJSONLWithResumeSlug(fileUUID: fileUUID, resumeSlug: resumeSlug))
+
+        let conversation = try #require(try await fixture.makeReader().loadSession(id: fileUUID))
+        #expect(conversation.id == fileUUID)
+    }
+
+    /// Real Claude Code sessions can emit `custom-title` hundreds of lines in (after snapshots / progress noise).
+    @Test("loadSession matches custom-title resume slug after many progress lines")
+    func loadCustomTitleAfterPadding() async throws {
+        let slug = "memorinia-mcp-apps-rollout"
+        let uuid = "4732b7a8-dbe8-4432-afc9-d8f781d0786d"
+        let ts = "2024-03-09T00:00:00.000Z"
+        var lines: [String] = []
+        for _ in 0 ..< 180 {
+            lines.append(#"{"type":"progress","sessionId":"\#(uuid)","timestamp":"\#(ts)"}"#)
+        }
+        lines.append(#"{"type":"custom-title","customTitle":"\#(slug)","sessionId":"\#(uuid)"}"#)
+        lines.append(#"{"type":"user","message":{"role":"user","content":"hi"},"timestamp":"\#(ts)"}"#)
+        lines.append(#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hey"}]},"timestamp":"\#(ts)"}"#)
+        let jsonl = lines.joined(separator: "\n")
+
+        var fixture = Fixture()
+        fixture.sessionID = uuid
+        fixture.configureSession(jsonl: jsonl)
+
+        let list = try await fixture.makeReader().listSessions()
+        let firstSummary = try #require(list.first)
+        #expect(firstSummary.id == slug)
+
+        let conversation = try #require(try await fixture.makeReader().loadSession(id: slug))
+        #expect(conversation.id == slug)
+        #expect(conversation.messages.count == 2)
     }
 }

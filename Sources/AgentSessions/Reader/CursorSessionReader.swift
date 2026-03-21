@@ -1,3 +1,4 @@
+import AsyncOperations
 import Foundation
 
 /// Reads Cursor sessions from either `store.db` files or agent transcript fallbacks.
@@ -218,20 +219,8 @@ public struct CursorSessionReader: SessionReader, Sendable {
 
         let dbPaths = try findStoreDatabases(in: baseDir)
 
-        return await withTaskGroup(of: SessionSummary?.self, returning: [SessionSummary].self) { group in
-            for dbPath in dbPaths {
-                group.addTask {
-                    try? self.summary(forDatabaseAt: dbPath)
-                }
-            }
-
-            var results: [SessionSummary] = []
-            for await result in group {
-                if let result {
-                    results.append(result)
-                }
-            }
-            return results
+        return await dbPaths.asyncCompactMap(numberOfConcurrentTasks: 10) { dbPath in
+            try? self.summary(forDatabaseAt: dbPath)
         }
     }
 

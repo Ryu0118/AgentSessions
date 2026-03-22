@@ -203,17 +203,17 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
     }
 
     private enum ResumeScanLimits {
-        /// Slug metadata (`custom-title`) can appear hundreds of lines in (after large snapshots).
+        /// Slug metadata (`custom-title`) can appear thousands of lines in after snapshots and progress noise.
         static let maxBytes = 8 * 1024 * 1024
-        static let maxLines = 2000
     }
 
     /// Reads the front of the file far enough to capture `custom-title` / `agent-name` resume labels.
     private func scanFrontResumeEntries(file: URL) throws -> [ClaudeCodeEntry] {
-        let data = try FileSystemHelper.readHead(fileSystem: fileSystem, file: file, maxBytes: ResumeScanLimits.maxBytes)
-        let text = String(decoding: data, as: UTF8.self)
-        let lines = text.split(whereSeparator: \.isNewline).prefix(ResumeScanLimits.maxLines)
-        return lines.compactMap { JSONLParser.decodeLine(String($0), as: ClaudeCodeEntry.self) }
+        try fileReader.readHeadEntries(
+            from: file,
+            as: ClaudeCodeEntry.self,
+            maxBytes: ResumeScanLimits.maxBytes
+        )
     }
 
     private func readMetadataEntries(file: URL) throws -> [ClaudeCodeEntry] {

@@ -260,14 +260,14 @@ struct ClaudeCodeSessionTests {
         #expect(conversation.id == fileUUID)
     }
 
-    /// Real Claude Code sessions can emit `custom-title` hundreds of lines in (after snapshots / progress noise).
-    @Test("loadSession matches custom-title resume slug after many progress lines")
+    /// Real Claude Code sessions can emit `custom-title` thousands of lines in (after snapshots / progress noise).
+    @Test("loadSession matches custom-title resume slug after more than 2000 progress lines")
     func loadCustomTitleAfterPadding() async throws {
         let slug = "memorinia-mcp-apps-rollout"
         let uuid = "4732b7a8-dbe8-4432-afc9-d8f781d0786d"
         let ts = "2024-03-09T00:00:00.000Z"
         var lines: [String] = []
-        for _ in 0 ..< 180 {
+        for _ in 0 ..< 3_400 {
             lines.append(#"{"type":"progress","sessionId":"\#(uuid)","timestamp":"\#(ts)"}"#)
         }
         lines.append(#"{"type":"custom-title","customTitle":"\#(slug)","sessionId":"\#(uuid)"}"#)

@@ -95,14 +95,13 @@ public struct CodexSessionReader: SessionReader, Sendable {
         let headEntries = try metadataEntries(file: file)
         let meta = extractMetadata(from: headEntries)
 
-        // First user message from the head scan (used for session lookup by opening prompt).
-        let initialPrompt: String? = headEntries.lazy
-            .compactMap { entry -> String? in
-                guard extractRole(from: entry) == .user else { return nil }
-                let content = extractContent(from: entry)
-                return content.isEmpty ? nil : content
-            }
-            .first
+        // First meaningful user message from the head scan (used for session lookup by opening prompt).
+        let headUserMessages = headEntries.compactMap { entry -> String? in
+            guard extractRole(from: entry) == .user else { return nil }
+            let content = extractContent(from: entry)
+            return content.isEmpty ? nil : content
+        }
+        let initialPrompt = MessageFilter.firstMeaningful(headUserMessages)
 
         // Tail: last user message
         let userMessages: [String] = try fileReader.readRecentValues(

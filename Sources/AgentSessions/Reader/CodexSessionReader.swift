@@ -92,7 +92,16 @@ public struct CodexSessionReader: SessionReader, Sendable {
     public func summary(for file: URL) throws -> SessionSummary {
         // Codex lines can be very large (AGENTS.md context etc.), so use generous byte limits.
         // Head: metadata extraction (session_meta is typically in first few lines)
-        let meta = try extractMetadata(from: metadataEntries(file: file))
+        let headEntries = try metadataEntries(file: file)
+        let meta = extractMetadata(from: headEntries)
+
+        // First meaningful user message from the head scan (used for session lookup by opening prompt).
+        let headUserMessages = headEntries.compactMap { entry -> String? in
+            guard extractRole(from: entry) == .user else { return nil }
+            let content = extractContent(from: entry)
+            return content.isEmpty ? nil : content
+        }
+        let initialPrompt = MessageFilter.firstMeaningful(headUserMessages)
 
         // Tail: last user message
         let userMessages: [String] = try fileReader.readRecentValues(
@@ -122,7 +131,8 @@ public struct CodexSessionReader: SessionReader, Sendable {
             model: nil,
             messageCount: 0,
             lastUserMessage: lastUserMessage,
-            byteSize: FileSystemHelper.fileSize(file, fileSystem: fileSystem)
+            byteSize: FileSystemHelper.fileSize(file, fileSystem: fileSystem),
+            initialPrompt: initialPrompt
         )
     }
 

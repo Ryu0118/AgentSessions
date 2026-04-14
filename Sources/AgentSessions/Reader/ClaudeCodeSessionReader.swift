@@ -127,6 +127,16 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
         let headEntries = rawHead.filter { !shouldSkipEntry($0) }
         let meta = scanMetadata(entries: headEntries, projectPath: projectPath)
 
+        // First user message from head entries (used for session lookup by opening prompt).
+        let initialPrompt: String? = headEntries.lazy
+            .compactMap { entry -> String? in
+                guard extractRole(from: entry) == .user else { return nil }
+                let content = extractContent(from: entry)
+                let decoded = ClaudeCodeContentDecoder.decode(content)
+                return decoded.isEmpty ? nil : decoded
+            }
+            .first
+
         // Read only the tail to avoid loading very large observer sessions just for the preview line.
         let userMessages: [String] = try fileReader.readRecentValues(
             from: file,
@@ -155,7 +165,8 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
             messageCount: 0,
             lastUserMessage: lastUserMessage,
             byteSize: FileSystemHelper.fileSize(file, fileSystem: fileSystem),
-            isObserverSession: meta.isObserver
+            isObserverSession: meta.isObserver,
+            initialPrompt: initialPrompt
         )
     }
 

@@ -16,6 +16,8 @@ public struct SessionSummary: Sendable {
     public let isObserverSession: Bool
     /// Optional path to the agent's backing storage for direct loading when ID lookup fails.
     public let storagePath: String?
+    /// The first user message in the session. Useful for matching sessions by their opening prompt.
+    public let initialPrompt: String?
 
     public init(
         id: String,
@@ -28,7 +30,8 @@ public struct SessionSummary: Sendable {
         lastUserMessage: String?,
         byteSize: Int64? = nil,
         isObserverSession: Bool = false,
-        storagePath: String? = nil
+        storagePath: String? = nil,
+        initialPrompt: String? = nil
     ) {
         self.id = id
         self.source = source
@@ -41,6 +44,7 @@ public struct SessionSummary: Sendable {
         self.byteSize = byteSize
         self.isObserverSession = isObserverSession
         self.storagePath = storagePath
+        self.initialPrompt = initialPrompt
     }
 }
 

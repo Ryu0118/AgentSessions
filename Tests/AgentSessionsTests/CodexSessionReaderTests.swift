@@ -208,6 +208,26 @@ struct CodexSessionTests {
         #expect(msgs[3].content == "Done! Tests added.")
     }
 
+    @Test("loadSession surfaces response_item(role=user) turns and skips developer entries")
+    func loadParsesResponseItemUsers() async throws {
+        var fixture = Fixture()
+        _ = fixture.configureRollout(
+            named: "rollout-resp.jsonl",
+            jsonl: TestFixtures.codexJSONLResponseItemUsers()
+        )
+        let conversation = try #require(
+            try await fixture.makeReader().loadSession(id: "codex-response-user")
+        )
+        let msgs = conversation.messages
+        // The developer entry is dropped; both user turns and the assistant turn survive.
+        #expect(msgs.count == 3)
+        #expect(msgs[0].role == .user)
+        #expect(msgs[0].content == "Build a function")
+        #expect(msgs[1].role == .assistant)
+        #expect(msgs[2].role == .user)
+        #expect(msgs[2].content == "Add tests")
+    }
+
     @Test("loadSession limit returns only the most recent messages")
     func loadParsesWithLimit() async throws {
         var fixture = Fixture()

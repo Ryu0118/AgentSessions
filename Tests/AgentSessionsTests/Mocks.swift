@@ -139,6 +139,21 @@ enum TestFixtures {
         """
     }
 
+    /// Codex JSONL where user turns are recorded as `response_item(role=user)` with `input_text`
+    /// blocks — the real rollout shape, which has no `event_msg(user_message)` counterpart.
+    static func codexJSONLResponseItemUsers(
+        sessionId: String = "codex-response-user",
+        timestamp: String = "2024-03-09T00:00:00.000Z"
+    ) -> String {
+        """
+        {"type":"session_meta","timestamp":"\(timestamp)","payload":{"id":"\(sessionId)","timestamp":"\(timestamp)","cwd":"/mock/project","cli_version":"0.0.0"}}
+        {"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Build a function"}]},"timestamp":"\(timestamp)"}
+        {"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Sure, here is the function."}]},"timestamp":"\(timestamp)"}
+        {"type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"injected context"}]},"timestamp":"\(timestamp)"}
+        {"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Add tests"}]},"timestamp":"\(timestamp)"}
+        """
+    }
+
     /// Codex JSONL where first user message is system noise; second is real.
     static func codexJSONLWithNoiseFirst(sessionId: String = "noise-session", timestamp: String = "2024-03-09T00:00:00.000Z") -> String {
         """

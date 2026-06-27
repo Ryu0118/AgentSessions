@@ -260,6 +260,11 @@ public struct CodexSessionReader: SessionReader, Sendable {
             if explicitRole == .assistant {
                 return .assistant
             }
+            // User turns are recorded as response_item entries (role=user, input_text blocks);
+            // there is no event_msg(user_message) counterpart, so this is the only place they surface.
+            if explicitRole == .user {
+                return .user
+            }
             // Legacy fallback: older Codex formats may omit explicit role but keep text content.
             if explicitRole == nil, !extractContent(from: entry).isEmpty {
                 return .assistant

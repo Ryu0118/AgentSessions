@@ -108,6 +108,19 @@ struct PathTruncatedTests {
     }
 }
 
+@Test("kimi-code AgentSource round-trips its rawValue")
+func kimiCodeAgentSourceRawValue() {
+    #expect(AgentSource.kimiCode.rawValue == "kimi-code")
+    #expect(AgentSource(rawValue: "kimi-code") == .kimiCode)
+    #expect(AgentSource.allCases.contains(.kimiCode))
+}
+
+@Test("DateUtils converts epoch milliseconds to Date")
+func epochMillisConversion() {
+    let date = DateUtils.date(fromEpochMillis: 1_784_512_258_248)
+    #expect(date.timeIntervalSince1970 == 1_784_512_258.248)
+}
+
 @Suite("Verifies human-readable byte count formatting.")
 struct ByteCountTests {
     struct TestCase: CustomTestStringConvertible, Sendable {

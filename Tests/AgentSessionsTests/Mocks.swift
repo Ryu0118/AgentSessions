@@ -210,4 +210,65 @@ enum TestFixtures {
 
         return lines.joined(separator: "\n")
     }
+
+    /// kimi-code wire.jsonl: two real user turns plus injected noise and a multi-part assistant turn.
+    /// All `append_message` lines are skipped by the reader, so the `background_task`/`injection`
+    /// user-role ones must NOT surface as user messages.
+    static func kimiWireJSONL() -> String {
+        """
+        {"type":"metadata","protocol_version":"1.4","created_at":1784512258248}
+        {"type":"config.update","modelAlias":"moonshot-ai/kimi-k2.6","thinkingEffort":"on","time":1784512276984}
+        {"type":"turn.prompt","input":[{"type":"text","text":"First question"}],"origin":{"kind":"user"},"time":1784518241132}
+        {"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"First question"}],"toolCalls":[],"origin":{"kind":"user"}},"time":1784518241132}
+        {"type":"context.append_loop_event","event":{"type":"step.begin","uuid":"a1","turnId":"0","step":1},"time":1784518241133}
+        {"type":"context.append_loop_event","event":{"type":"content.part","uuid":"a2","turnId":"0","step":1,"stepUuid":"a1","part":{"type":"think","think":"internal"}},"time":1784518241134}
+        {"type":"context.append_loop_event","event":{"type":"content.part","uuid":"a3","turnId":"0","step":1,"stepUuid":"a1","part":{"type":"text","text":"First "}},"time":1784518241135}
+        {"type":"context.append_loop_event","event":{"type":"step.begin","uuid":"a4","turnId":"0","step":2},"time":1784518241136}
+        {"type":"context.append_loop_event","event":{"type":"content.part","uuid":"a5","turnId":"0","step":2,"stepUuid":"a4","part":{"type":"text","text":"answer"}},"time":1784518241137}
+        {"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>noise</system-reminder>"}],"toolCalls":[],"origin":{"kind":"injection"}},"time":1784518241138}
+        {"type":"context.append_message","message":{"role":"user","content":[{"type":"text","text":"task done"}],"toolCalls":[],"origin":{"kind":"background_task"}},"time":1784518241139}
+        {"type":"turn.prompt","input":[{"type":"text","text":"Second question"}],"origin":{"kind":"user"},"time":1784518241140}
+        {"type":"context.append_loop_event","event":{"type":"content.part","uuid":"b1","turnId":"1","step":1,"stepUuid":"b0","part":{"type":"text","text":"Second answer"}},"time":1784518241141}
+        """
+    }
+
+    /// Populates a MockFileManager with one kimi session (index line, state.json, wire.jsonl)
+    /// under a fake ~/.kimi-code and returns the session id.
+    @discardableResult
+    static func installKimiSession(
+        into fs: MockFileManager,
+        home: URL,
+        sessionId: String = "session_11111111-2222-3333-4444-555555555555",
+        workspaceDir: String = "wd_project_abcdef012345",
+        workDir: String = "/mock/project",
+        createdAt: String = "2024-03-09T00:00:00.000Z",
+        title: String = "Migrated session",
+        includeState: Bool = true,
+        wire: String = kimiWireJSONL()
+    ) -> String {
+        let kimi = home.appendingPathComponent(".kimi-code")
+        let sessionsDir = kimi.appendingPathComponent("sessions")
+        let sessionDir = sessionsDir
+            .appendingPathComponent(workspaceDir)
+            .appendingPathComponent(sessionId)
+        let mainDir = sessionDir.appendingPathComponent("agents/main")
+
+        // Directory graph the reader walks.
+        fs.directories[kimi.path] = [kimi.appendingPathComponent("session_index.jsonl")]
+        fs.directories[sessionsDir.path] = [sessionDir.deletingLastPathComponent()]
+
+        // Index (authoritative discovery).
+        let indexLine = #"{"sessionId":"\#(sessionId)","sessionDir":"\#(sessionDir.path)","workDir":"\#(workDir)"}"#
+        fs.files[kimi.appendingPathComponent("session_index.jsonl").path] = Data(indexLine.utf8)
+
+        // state.json
+        if includeState {
+            let state = #"{"createdAt":"\#(createdAt)","updatedAt":"\#(createdAt)","title":"\#(title)","workDir":"\#(workDir)"}"#
+            fs.files[sessionDir.appendingPathComponent("state.json").path] = Data(state.utf8)
+        }
+
+        // wire.jsonl
+        fs.files[mainDir.appendingPathComponent("wire.jsonl").path] = Data(wire.utf8)
+        return sessionId
+    }
 }

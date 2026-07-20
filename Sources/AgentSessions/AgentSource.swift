@@ -5,4 +5,5 @@ public enum AgentSource: String, Codable, CaseIterable, Sendable {
     case claudeCode = "claude-code"
     case codex
     case cursor
+    case kimiCode = "kimi-code"
 }

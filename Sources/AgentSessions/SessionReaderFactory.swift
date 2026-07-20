@@ -10,6 +10,7 @@ public enum SessionReaderFactory {
             ClaudeCodeSessionReader(fileSystem: fileSystem),
             CodexSessionReader(fileSystem: fileSystem),
             CursorSessionReader(fileSystem: fileSystem, sqlite: sqlite),
+            KimiCodeSessionReader(fileSystem: fileSystem),
         ]
     }
 }

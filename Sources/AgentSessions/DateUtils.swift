@@ -45,4 +45,11 @@ public enum DateUtils: Sendable {
         formatter.timeZone = TimeZone.current
         return formatter
     }()
+
+    /// kimi-code wire events store time as integer epoch milliseconds.
+    private static let millisPerSecond = 1000.0
+
+    public static func date(fromEpochMillis millis: Int) -> Date {
+        Date(timeIntervalSince1970: Double(millis) / millisPerSecond)
+    }
 }

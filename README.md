@@ -7,6 +7,7 @@ A Swift library to read and parse conversation sessions from AI coding agents.
 - Claude Code
 - Codex
 - Cursor
+- Kimi Code
 
 ## Usage
 

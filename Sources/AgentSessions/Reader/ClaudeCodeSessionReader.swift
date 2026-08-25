@@ -38,9 +38,7 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
         guard fileSystem.fileExists(atPath: baseDir.path) else {
             return []
         }
-        let projectDirs = try fileSystem.contentsOfDirectory(
-            at: baseDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
-        )
+        let projectDirs = try projectDirectories()
 
         let sessionFiles = try sessionFiles(in: projectDirs)
         return await SessionSummaryCollector.collect(sessionFiles) { sessionFile in
@@ -50,9 +48,7 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
 
     public func loadSession(id: String, storagePath _: String?, limit: Int?) async throws -> UnifiedConversation? {
         guard fileSystem.fileExists(atPath: baseDir.path) else { return nil }
-        let projectDirs = try fileSystem.contentsOfDirectory(
-            at: baseDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
-        )
+        let projectDirs = try projectDirectories()
 
         let sessionFiles = try sessionFiles(in: projectDirs)
 
@@ -85,6 +81,32 @@ public struct ClaudeCodeSessionReader: SessionReader, Sendable {
         return try fileSystem.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
         ).filter { $0.pathExtension == "jsonl" }
+    }
+
+    /// Normalizes project-root entries before descending into them.
+    ///
+    /// Claude Code can leave stale files or symlinks in `~/.claude/projects`. Resolving symlinks here
+    /// avoids asking `FileManager` to enumerate a symlink URL, which can fail on macOS even when the
+    /// symlink target is a directory.
+    private func projectDirectories() throws -> [URL] {
+        let entries = try fileSystem.contentsOfDirectory(
+            at: baseDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        )
+        var seenPaths = Set<String>()
+        return entries.compactMap { entry in
+            guard isDirectory(at: entry) else { return nil }
+
+            let resolved = entry.resolvingSymlinksInPath().standardizedFileURL
+            guard isDirectory(at: resolved), seenPaths.insert(resolved.path).inserted else {
+                return nil
+            }
+            return resolved
+        }
+    }
+
+    private func isDirectory(at url: URL) -> Bool {
+        var isDirectory = ObjCBool(false)
+        return fileSystem.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
     }
 
     private func sessionFiles(in projectDirs: [URL]) throws -> [SessionFile] {

@@ -188,6 +188,39 @@ struct ClaudeCodeSessionTests {
         #expect(sessions[0].lastUserMessage == "Thanks")
     }
 
+    @Test("loadSession ignores non-directory entries in the projects root")
+    func loadIgnoresNonDirectoryProjectEntries() async throws {
+        var fixture = Fixture()
+        fixture.configureSession()
+        let pointer = fixture.baseDir.appendingPathComponent("bridge-pointer")
+        fixture.fileSystem.files[pointer.path] = Data()
+        fixture.fileSystem.directories[fixture.baseDir.path] = [pointer, fixture.projectDir]
+
+        let conversation = try #require(try await fixture.makeReader().loadSession(id: fixture.sessionID))
+        #expect(conversation.messages.count == 4)
+    }
+
+    @Test("loadSession resolves symlinked project directories")
+    func loadResolvesSymlinkedProjectDirectory() async throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("agent-sessions-claude-\(UUID().uuidString)", isDirectory: true)
+        let projects = root.appendingPathComponent("projects", isDirectory: true)
+        let target = projects.appendingPathComponent("-Volumes-KINGSTON-workspace", isDirectory: true)
+        let pointer = projects.appendingPathComponent("-Users-ryu-workspace", isDirectory: true)
+        let session = target.appendingPathComponent("session-abc.jsonl")
+        defer { try? fileManager.removeItem(at: root) }
+
+        try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
+        try Data(TestFixtures.claudeCodeJSONL().utf8).write(to: session)
+        try fileManager.createSymbolicLink(at: pointer, withDestinationURL: target)
+
+        let reader = ClaudeCodeSessionReader(fileSystem: DefaultFileSystem(), baseDir: projects)
+        let conversation = try #require(try await reader.loadSession(id: "session-abc"))
+        #expect(conversation.projectPath == "/Volumes/KINGSTON/workspace")
+        #expect(conversation.messages.count == 4)
+    }
+
     @Test("loadSession returns nil for unknown ID")
     func loadNotFound() async throws {
         let fixture = Fixture()

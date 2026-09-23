@@ -6,4 +6,5 @@ public enum AgentSource: String, Codable, CaseIterable, Sendable {
     case codex
     case cursor
     case kimiCode = "kimi-code"
+    case copilotCLI = "copilot-cli"
 }

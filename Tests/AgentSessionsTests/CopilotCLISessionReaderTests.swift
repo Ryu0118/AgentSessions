@@ -114,6 +114,22 @@ struct CopilotCLISessionReaderTests {
         #expect(conversation.messages.map(\.content) == ["Follow-up request", "Second result."])
     }
 
+    @Test(
+        "rejects Copilot session IDs that are not safe path components",
+        arguments: ["../outside", "..\\outside", "/tmp/outside", "C:outside"]
+    )
+    func rejectsUnsafeSessionID(_ id: String) async throws {
+        let fixture = Fixture()
+        let reader = try fixture.reader()
+        let escapedDirectory = fixture.sessionStateDirectory.appendingPathComponent(id)
+        let escapedEvents = escapedDirectory.appendingPathComponent("events.jsonl")
+        fixture.fileSystem.files[escapedEvents.path] = Data(Fixture.eventsJSONL.utf8)
+
+        let conversation = try await reader.loadSession(id: id)
+
+        #expect(conversation == nil)
+    }
+
     @Test("missing Copilot storage returns no sessions and a nil direct load")
     func emptyStoreIsGraceful() async throws {
         let fileSystem = MockFileManager()

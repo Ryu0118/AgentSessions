@@ -88,6 +88,7 @@ public struct CopilotCLISessionReader: SessionReader, Sendable {
     }
 
     public func loadSession(id: String, storagePath: String?, limit: Int?) async throws -> UnifiedConversation? {
+        guard storagePath != nil || Self.isSessionIDPathComponent(id) else { return nil }
         let sessionDirectory = storagePath.map(URL.init(fileURLWithPath:))
             ?? sessionsDirectory.appendingPathComponent(id)
         let events = readEvents(from: sessionDirectory)
@@ -139,6 +140,12 @@ public struct CopilotCLISessionReader: SessionReader, Sendable {
         let eventsFile = sessionDirectory.appendingPathComponent(CopilotStorageComponent.eventsFile.rawValue)
         guard let data = fileSystem.contents(atPath: eventsFile.path) else { return [] }
         return JSONLParser.decodeLines(String(decoding: data, as: UTF8.self), as: CopilotEvent.self)
+    }
+
+    /// Prevents an ID from changing the session-store directory when it becomes a path component.
+    private static func isSessionIDPathComponent(_ id: String) -> Bool {
+        guard !id.isEmpty, id != ".", id != ".." else { return false }
+        return id.rangeOfCharacter(from: CharacterSet(charactersIn: "/\\:")) == nil
     }
 
     private func projectPath(in sessionDirectory: URL) -> String? {

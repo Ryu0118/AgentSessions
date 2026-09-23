@@ -2,6 +2,8 @@ import Foundation
 
 /// Shared date parsing utilities
 public enum DateUtils: Sendable {
+    private static let iso8601FormatterLock = NSLock()
+
     private nonisolated(unsafe) static let iso8601Formatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -16,6 +18,10 @@ public enum DateUtils: Sendable {
 
     /// Parse an ISO 8601 date string, trying fractional seconds first
     public static func parseISO8601(_ string: String) -> Date? {
+        // Serialize access because Foundation date formatters are not thread-safe.
+        iso8601FormatterLock.lock()
+        defer { iso8601FormatterLock.unlock() }
+
         if let date = iso8601Formatter.date(from: string) {
             return date
         }

@@ -8,6 +8,9 @@ A Swift library to read and parse conversation sessions from AI coding agents.
 - Codex
 - Cursor
 - Kimi Code
+- GitHub Copilot CLI
+
+GitHub Copilot CLI sessions are read from `~/.copilot/session-state/<session-id>/events.jsonl`.
 
 ## Usage
 

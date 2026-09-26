@@ -11,6 +11,7 @@ public enum SessionReaderFactory {
             CodexSessionReader(fileSystem: fileSystem),
             CursorSessionReader(fileSystem: fileSystem, sqlite: sqlite),
             KimiCodeSessionReader(fileSystem: fileSystem),
+            CopilotCLISessionReader(fileSystem: fileSystem),
         ]
     }
 }

@@ -64,6 +64,31 @@ struct DateUtilsTests {
             #expect(result == nil)
         }
     }
+
+    @Test("parses dates consistently across concurrent readers")
+    func parseISO8601Concurrently() async throws {
+        let expectedFractional = try #require(DateUtils.parseISO8601("2024-03-09T12:30:00.123Z"))
+        let expectedWholeSecond = try #require(DateUtils.parseISO8601("2024-03-09T12:30:00Z"))
+
+        await withTaskGroup(of: Bool.self) { group in
+            for _ in 0 ..< 64 {
+                group.addTask {
+                    for _ in 0 ..< 100 {
+                        guard DateUtils.parseISO8601("2024-03-09T12:30:00.123Z") == expectedFractional,
+                              DateUtils.parseISO8601("2024-03-09T12:30:00Z") == expectedWholeSecond
+                        else {
+                            return false
+                        }
+                    }
+                    return true
+                }
+            }
+
+            for await result in group {
+                #expect(result)
+            }
+        }
+    }
 }
 
 @Suite("Verifies middle truncation behavior for displayed project paths.")

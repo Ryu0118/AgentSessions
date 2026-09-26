@@ -74,7 +74,7 @@ extension UnifiedMessage {
             return ClaudeCodeContentDecoder.decode(content)
         case .cursor:
             return CursorAgentContentDecoder.decode(content)
-        case .codex, .kimiCode:
+        case .codex, .kimiCode, .copilotCLI:
             return content
         }
     }

@@ -46,3 +46,7 @@ Swift library to read and parse conversation sessions from AI coding agents (Cla
 
 - Cursor `store.db` uses protobuf + SHA-256 blob DAG. `meta` table values are hex-encoded JSON
 - This library is read-only. Session writing/migration is out of scope
+
+## Documentation
+
+- When documentation and the existing code disagree, follow the conventions used in the existing code, and in your final reply list every inconsistency you found between the documentation and the code.

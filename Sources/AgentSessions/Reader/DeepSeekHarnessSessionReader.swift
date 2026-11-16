@@ -127,6 +127,27 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
     }
 
     private func summary(for location: SessionLocation) throws -> SessionSummary {
+        // Prefer projcache for list metadata so we do not decompress every zstd log.
+        if let cache = projcacheRecord(for: location.id) {
+            let byteSize = (try? fileSystem.attributesOfItem(atPath: location.fileURL.path)[.size] as? NSNumber)?.int64Value
+            let createdAt = cache.createdAt ?? Date(timeIntervalSince1970: 0)
+            let initialPrompt = cache.firstPrompt
+            let lastUserMessage = cache.title ?? initialPrompt
+            return SessionSummary(
+                id: location.id,
+                source: .deepseekHarness,
+                projectPath: cache.cwd ?? location.projectPath,
+                createdAt: createdAt,
+                lastMessageAt: cache.updatedAt ?? createdAt,
+                model: cache.model,
+                messageCount: cache.promptCount,
+                lastUserMessage: lastUserMessage.map { String($0.prefix(200)) },
+                byteSize: byteSize,
+                storagePath: location.fileURL.path,
+                initialPrompt: initialPrompt.map { String($0.prefix(200)) }
+            )
+        }
+
         let conversation = try conversation(from: location, limit: nil)
         let userMessages = conversation.messages.filter { $0.role == .user }.map(\.content)
         let byteSize = (try? fileSystem.attributesOfItem(atPath: location.fileURL.path)[.size] as? NSNumber)?.int64Value
@@ -142,6 +163,54 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
             byteSize: byteSize,
             storagePath: location.fileURL.path,
             initialPrompt: MessageFilter.firstMeaningful(userMessages)
+        )
+    }
+
+    private struct ProjcacheRecord {
+        let cwd: String?
+        let createdAt: Date?
+        let updatedAt: Date?
+        let title: String?
+        let firstPrompt: String?
+        let promptCount: Int
+        let model: String?
+    }
+
+    private func projcacheRecord(for sessionId: String) -> ProjcacheRecord? {
+        let cacheFile = projcacheDir.appendingPathComponent("\(sessionId).json")
+        guard let data = fileSystem.contents(atPath: cacheFile.path),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let record = json["record"] as? [String: Any]
+        else {
+            return nil
+        }
+        let identity = record["identity"] as? [String: Any]
+        let rows = record["rows"] as? [String: Any]
+        let title = (rows?["title"] as? [String: Any])?["val"] as? String
+        let titleInput = (rows?["titleInput"] as? [String: Any])?["val"] as? [String: Any]
+        let firstPrompt = (titleInput?["first"] as? [String: Any])?["text"] as? String
+        let promptCount = titleInput?["count"] as? Int ?? 0
+        let modelSelection = (rows?["modelSelection"] as? [String: Any])?["val"] as? [String: Any]
+        let model = modelSelection?["model"] as? String
+        let createdMillis = identity?["createdAt"] as? Int64
+            ?? (identity?["createdAt"] as? Int).map(Int64.init)
+        // Prefer the highest seq among known rows as a cheap updatedAt proxy.
+        let updatedMillis = [
+            (rows?["title"] as? [String: Any])?["seq"] as? Int64,
+            (rows?["titleInput"] as? [String: Any])?["seq"] as? Int64,
+        ].compactMap { $0 }.max().flatMap { seq -> Int64? in
+            // seq is not epoch time; keep createdAt when we lack a real timestamp.
+            _ = seq
+            return createdMillis
+        }
+        return ProjcacheRecord(
+            cwd: identity?["cwd"] as? String,
+            createdAt: createdMillis.map { DateUtils.date(fromEpochMillis: Int($0)) },
+            updatedAt: updatedMillis.map { DateUtils.date(fromEpochMillis: Int($0)) },
+            title: title,
+            firstPrompt: firstPrompt,
+            promptCount: promptCount,
+            model: model
         )
     }
 
@@ -220,18 +289,7 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
     }
 
     private func projcacheModel(for sessionId: String) -> String? {
-        let cacheFile = projcacheDir.appendingPathComponent("\(sessionId).json")
-        guard let data = fileSystem.contents(atPath: cacheFile.path),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let record = json["record"] as? [String: Any],
-              let rows = record["rows"] as? [String: Any],
-              let modelSelection = rows["modelSelection"] as? [String: Any],
-              let val = modelSelection["val"] as? [String: Any]
-        else {
-            return nil
-        }
-        if let model = val["model"] as? String { return model }
-        return nil
+        projcacheRecord(for: sessionId)?.model
     }
 
     private static func role(for event: SessionEvent) -> MessageRole? {

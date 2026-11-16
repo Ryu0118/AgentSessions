@@ -148,21 +148,21 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
             )
         }
 
-        let conversation = try conversation(from: location, limit: nil)
-        let userMessages = conversation.messages.filter { $0.role == .user }.map(\.content)
+        // Avoid decompressing during list when projcache is missing; loadSession still reads the log.
         let byteSize = (try? fileSystem.attributesOfItem(atPath: location.fileURL.path)[.size] as? NSNumber)?.int64Value
+        let mtime = (try? fileSystem.attributesOfItem(atPath: location.fileURL.path)[.modificationDate] as? Date)
         return SessionSummary(
             id: location.id,
             source: .deepseekHarness,
-            projectPath: conversation.projectPath ?? location.projectPath,
-            createdAt: conversation.createdAt,
-            lastMessageAt: conversation.messages.last?.timestamp,
-            model: conversation.model,
-            messageCount: conversation.messages.count,
-            lastUserMessage: MessageFilter.lastMeaningful(userMessages),
+            projectPath: location.projectPath,
+            createdAt: mtime ?? Date(timeIntervalSince1970: 0),
+            lastMessageAt: mtime,
+            model: nil,
+            messageCount: 0,
+            lastUserMessage: nil,
             byteSize: byteSize,
             storagePath: location.fileURL.path,
-            initialPrompt: MessageFilter.firstMeaningful(userMessages)
+            initialPrompt: nil
         )
     }
 

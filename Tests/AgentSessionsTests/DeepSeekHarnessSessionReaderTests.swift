@@ -7,7 +7,7 @@ struct DeepSeekHarnessSessionReaderTests {
         let fileSystem = MockFileManager()
         let home = URL(fileURLWithPath: "/Users/tester")
         let sessionID = "session-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-        let projectPath = "/mock/dsh-project"
+        let projectPath = "/mock/dshproject"
         let sessionFile: URL
 
         init() throws {
@@ -51,6 +51,10 @@ struct DeepSeekHarnessSessionReaderTests {
         #expect(
             DeepSeekHarnessSessionReader.encodedWorkspaceDirectory(for: "/Users/mac/project")
                 == "--Users-mac-project--"
+        )
+        #expect(
+            DeepSeekHarnessSessionReader.encodedWorkspaceDirectory(for: "/mock/dshproject")
+                == "--mock-dshproject--"
         )
     }
 

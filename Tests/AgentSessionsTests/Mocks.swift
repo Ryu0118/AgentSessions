@@ -59,11 +59,19 @@ final class MockFileManager: FileSystemProtocol, @unchecked Sendable {
 /// In-memory SQLite stub that lets tests control full and recent blob queries independently.
 final class MockSQLiteReader: SQLiteReader, @unchecked Sendable {
     var queryResults: [[String: Any]] = []
+    /// First matching `sql.contains(substring)` wins; falls back to `queryResults`.
+    var queryResultsByContains: [(substring: String, rows: [[String: Any]])] = []
     var blobResults: [(id: String, data: Data)] = []
     var recentBlobResults: [(id: String, data: Data)]?
     var lastRecentBlobLimit: Int?
 
-    func query(dbPath _: String, sql _: String) throws -> [[String: Any]] { queryResults }
+    func query(dbPath _: String, sql: String) throws -> [[String: Any]] {
+        if let match = queryResultsByContains.first(where: { sql.contains($0.substring) }) {
+            return match.rows
+        }
+        return queryResults
+    }
+
     func queryBlobs(dbPath _: String) throws -> [(id: String, data: Data)] { blobResults }
     func queryRecentBlobs(dbPath _: String, limit: Int) throws -> [(id: String, data: Data)] {
         lastRecentBlobLimit = limit

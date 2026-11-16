@@ -9,6 +9,8 @@ A Swift library to read and parse conversation sessions from AI coding agents.
 - Cursor
 - Kimi Code
 - GitHub Copilot CLI
+- ZCode (`~/.zcode/cli/db/db.sqlite`)
+- DeepSeek Harness (`~/.dsh/sessions/.../session.v4.jsonl.zstd`)
 
 GitHub Copilot CLI sessions are read from `~/.copilot/session-state/<session-id>/events.jsonl`.
 

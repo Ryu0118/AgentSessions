@@ -64,9 +64,7 @@ struct DeepSeekHarnessSessionReaderTests {
         #expect(summary.id == fixture.sessionID)
         #expect(summary.source == .deepseekHarness)
         #expect(summary.projectPath == fixture.projectPath)
-        #expect(summary.messageCount == 4)
-        #expect(summary.lastUserMessage == "Follow-up")
-        #expect(summary.initialPrompt == "First DSH request")
+        // List avoids decompressing when projcache is absent; loadSession still reads the log.
         #expect(summary.storagePath == fixture.sessionFile.path)
     }
 

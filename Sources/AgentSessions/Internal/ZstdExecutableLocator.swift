@@ -13,11 +13,14 @@ enum ZstdExecutableLocator {
         "/usr/bin/zstd",
     ]
 
-    static func locate() -> String? {
-        let pathDirectories = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+    static func locate(
+        in fileSystem: any FileSystemProtocol,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> String? {
+        let pathDirectories = (environment["PATH"] ?? "")
             .split(separator: ":")
             .map(String.init)
         let candidates = pathDirectories.map { "\($0)/\(toolName)" } + fixedCandidates
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+        return candidates.first { fileSystem.isExecutableFile(atPath: $0) }
     }
 }

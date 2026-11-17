@@ -55,7 +55,7 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
         fileSystem: any FileSystemProtocol = DefaultFileSystem(),
         baseDir: URL? = nil
     ) {
-        self.init(fileSystem: fileSystem, baseDir: baseDir, decompressor: SystemZstdDecompressor())
+        self.init(fileSystem: fileSystem, baseDir: baseDir, decompressor: SystemZstdDecompressor(fileSystem: fileSystem))
     }
 
     init(

@@ -1,87 +1,75 @@
 import Foundation
 
-/// Thin wrapper around the system `zstd` CLI for DeepSeek Harness session logs.
+/// Decompresses zstd payloads. Abstracted so readers can be tested without the `zstd` binary.
+protocol ZstdDecompressing: Sendable {
+    func decompress(_ data: Data) throws -> Data
+}
+
+/// Default implementation backed by the system `zstd` CLI.
 ///
-/// Uses temp files instead of pipes so large payloads cannot deadlock on a full stdout buffer
-/// while `waitUntilExit` runs before the pipe is drained.
-enum ZstdCodec {
-    static func decompress(_ data: Data) throws -> Data {
-        try run(mode: .decompress, input: data)
-    }
+/// Uses temp files instead of pipes so large payloads cannot deadlock on a full pipe buffer.
+struct SystemZstdDecompressor: ZstdDecompressing {
+    static let toolName = "zstd"
+    private static let fixedCandidates = ["/opt/homebrew/bin/zstd", "/usr/local/bin/zstd", "/usr/bin/zstd"]
 
-    static func compress(_ data: Data) throws -> Data {
-        try run(mode: .compress, input: data)
-    }
-
-    private enum Mode {
-        case compress
-        case decompress
-    }
-
-    private static func run(mode: Mode, input: Data) throws -> Data {
-        guard let zstdPath = resolveZstdPath() else {
-            throw SessionReaderError.cannotReadFile("zstd binary not found on PATH")
+    func decompress(_ data: Data) throws -> Data {
+        guard let zstdPath = Self.resolveZstdPath() else {
+            throw SessionReaderError.decompressorUnavailable(tool: Self.toolName)
         }
 
-        let directory = FileManager.default.temporaryDirectory
+        let fileManager = FileManager.default
+        let directory = fileManager.temporaryDirectory
             .appendingPathComponent("agentsessions-zstd-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? fileManager.removeItem(at: directory) }
 
         let inputURL = directory.appendingPathComponent("input")
         let outputURL = directory.appendingPathComponent("output")
-        try input.write(to: inputURL)
+        let errorURL = directory.appendingPathComponent("stderr")
+        try data.write(to: inputURL)
+        guard fileManager.createFile(atPath: errorURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+            throw SessionReaderError.cannotReadFile(errorURL.path)
+        }
+        let errorHandle = try FileHandle(forWritingTo: errorURL)
+        defer { try? errorHandle.close() }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: zstdPath)
-        switch mode {
-        case .compress:
-            process.arguments = ["-q", "-f", inputURL.path, "-o", outputURL.path]
-        case .decompress:
-            process.arguments = ["-q", "-d", "-f", inputURL.path, "-o", outputURL.path]
-        }
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.arguments = ["-q", "-d", "-f", inputURL.path, "-o", outputURL.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errorHandle
 
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            throw SessionReaderError.decompressionFailed(
+                tool: Self.toolName,
+                detail: "could not launch \(zstdPath): \(error.localizedDescription)"
+            )
+        }
         process.waitUntilExit()
+
         if process.terminationStatus != 0 {
-            let err = String(
-                data: (process.standardError as? Pipe)?.fileHandleForReading.readDataToEndOfFile() ?? Data(),
-                encoding: .utf8
-            ) ?? ""
-            throw SessionReaderError.cannotReadFile("zstd failed: \(err)")
+            let stderr = (try? String(contentsOf: errorURL, encoding: .utf8))?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let reason = process.terminationReason == .uncaughtSignal
+                ? "terminated by signal \(process.terminationStatus)"
+                : "exit status \(process.terminationStatus)"
+            let suffix = stderr.isEmpty ? "no stderr output" : "stderr: \(stderr)"
+            throw SessionReaderError.decompressionFailed(tool: Self.toolName, detail: "\(reason), \(suffix)")
         }
         return try Data(contentsOf: outputURL)
     }
 
+    /// Scans `PATH` first, then well-known install locations.
     private static func resolveZstdPath() -> String? {
-        let candidates = [
-            "/opt/homebrew/bin/zstd",
-            "/usr/local/bin/zstd",
-            "/usr/bin/zstd",
-        ]
-        if let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
-            return found
-        }
-        let which = Process()
-        which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        which.arguments = ["zstd"]
-        let pipe = Pipe()
-        which.standardOutput = pipe
-        which.standardError = Pipe()
-        do {
-            try which.run()
-            which.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if let path, !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
-        } catch {
-            return nil
-        }
-        return nil
+        let pathDirs = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+            .split(separator: ":")
+            .map { "\($0)/\(toolName)" }
+        return (pathDirs + fixedCandidates).first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 }

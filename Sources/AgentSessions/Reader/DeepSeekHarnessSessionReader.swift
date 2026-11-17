@@ -7,6 +7,7 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
     private let fileSystem: any FileSystemProtocol
     private let sessionsDir: URL
     private let projcacheDir: URL
+    private let decompressor: any ZstdDecompressing
 
     private enum Constants {
         static let sessionFileName = "session.v4.jsonl.zstd"
@@ -54,7 +55,16 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
         fileSystem: any FileSystemProtocol = DefaultFileSystem(),
         baseDir: URL? = nil
     ) {
+        self.init(fileSystem: fileSystem, baseDir: baseDir, decompressor: SystemZstdDecompressor())
+    }
+
+    init(
+        fileSystem: any FileSystemProtocol,
+        baseDir: URL?,
+        decompressor: any ZstdDecompressing
+    ) {
         self.fileSystem = fileSystem
+        self.decompressor = decompressor
         let root = baseDir ?? fileSystem.homeDirectoryForCurrentUser.appendingPathComponent(".dsh")
         sessionsDir = root.appendingPathComponent("sessions")
         projcacheDir = root.appendingPathComponent("storages/session_projcache/sessions")
@@ -114,10 +124,6 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
             messages.append(UnifiedMessage(role: role, content: text, timestamp: timestamp))
         }
         return (messages, nil, cwd, createdAt, sessionId)
-    }
-
-    static func decompressZstd(_ data: Data) throws -> Data {
-        try ZstdCodec.decompress(data)
     }
 
     /// Encodes a workspace path the same way DeepSeek Harness names session parent directories.
@@ -218,7 +224,7 @@ public struct DeepSeekHarnessSessionReader: SessionReader, Sendable {
         guard let compressed = fileSystem.contents(atPath: location.fileURL.path) else {
             throw SessionReaderError.cannotReadFile(location.fileURL.path)
         }
-        let decompressed = try Self.decompressZstd(compressed)
+        let decompressed = try decompressor.decompress(compressed)
         guard let text = String(data: decompressed, encoding: .utf8) else {
             throw SessionReaderError.cannotReadFile(location.fileURL.path)
         }

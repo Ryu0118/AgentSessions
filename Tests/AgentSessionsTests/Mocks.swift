@@ -8,6 +8,16 @@ final class MockFileManager: FileSystemProtocol, @unchecked Sendable {
     var files: [String: Data] = [:]
     var directories: [String: [URL]] = [:]
     var fileAttributes: [String: [FileAttributeKey: Any]] = [:]
+    var executablePaths: Set<String> = []
+    var temporaryDirectory: URL = URL(fileURLWithPath: "/mock/tmp", isDirectory: true)
+
+    func isExecutableFile(atPath path: String) -> Bool { executablePaths.contains(path) }
+
+    func removeItem(at url: URL) throws {
+        guard files.removeValue(forKey: url.path) != nil || directories.removeValue(forKey: url.path) != nil else {
+            throw mockError("No item: \(url.path)")
+        }
+    }
 
     func contentsOfDirectory(atPath path: String) throws -> [String] {
         guard let entries = directories[path] else { throw mockError("No dir: \(path)") }

@@ -12,11 +12,26 @@ public protocol FileSystemProtocol: Sendable {
     func contentsOfDirectory(atPath path: String) throws -> [String]
     func contentsOfDirectory(at url: URL, includingPropertiesForKeys keys: [URLResourceKey]?, options mask: FileManager.DirectoryEnumerationOptions) throws -> [URL]
     func attributesOfItem(atPath path: String) throws -> [FileAttributeKey: Any]
+    func isExecutableFile(atPath path: String) -> Bool
+    func removeItem(at url: URL) throws
+    var temporaryDirectory: URL { get }
 }
 
 /// Default adapter that forwards `FileSystemProtocol` calls to `FileManager`.
 public struct DefaultFileSystem: FileSystemProtocol, Sendable {
     public init() {}
+
+    public func isExecutableFile(atPath path: String) -> Bool {
+        FileManager.default.isExecutableFile(atPath: path)
+    }
+
+    public func removeItem(at url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+
+    public var temporaryDirectory: URL {
+        FileManager.default.temporaryDirectory
+    }
 
     public var homeDirectoryForCurrentUser: URL {
         FileManager.default.homeDirectoryForCurrentUser

@@ -8,6 +8,16 @@ final class MockFileManager: FileSystemProtocol, @unchecked Sendable {
     var files: [String: Data] = [:]
     var directories: [String: [URL]] = [:]
     var fileAttributes: [String: [FileAttributeKey: Any]] = [:]
+    var executablePaths: Set<String> = []
+    var temporaryDirectory: URL = URL(fileURLWithPath: "/mock/tmp", isDirectory: true)
+
+    func isExecutableFile(atPath path: String) -> Bool { executablePaths.contains(path) }
+
+    func removeItem(at url: URL) throws {
+        guard files.removeValue(forKey: url.path) != nil || directories.removeValue(forKey: url.path) != nil else {
+            throw mockError("No item: \(url.path)")
+        }
+    }
 
     func contentsOfDirectory(atPath path: String) throws -> [String] {
         guard let entries = directories[path] else { throw mockError("No dir: \(path)") }
@@ -59,11 +69,19 @@ final class MockFileManager: FileSystemProtocol, @unchecked Sendable {
 /// In-memory SQLite stub that lets tests control full and recent blob queries independently.
 final class MockSQLiteReader: SQLiteReader, @unchecked Sendable {
     var queryResults: [[String: Any]] = []
+    /// First matching `sql.contains(substring)` wins; falls back to `queryResults`.
+    var queryResultsByContains: [(substring: String, rows: [[String: Any]])] = []
     var blobResults: [(id: String, data: Data)] = []
     var recentBlobResults: [(id: String, data: Data)]?
     var lastRecentBlobLimit: Int?
 
-    func query(dbPath _: String, sql _: String) throws -> [[String: Any]] { queryResults }
+    func query(dbPath _: String, sql: String) throws -> [[String: Any]] {
+        if let match = queryResultsByContains.first(where: { sql.contains($0.substring) }) {
+            return match.rows
+        }
+        return queryResults
+    }
+
     func queryBlobs(dbPath _: String) throws -> [(id: String, data: Data)] { blobResults }
     func queryRecentBlobs(dbPath _: String, limit: Int) throws -> [(id: String, data: Data)] {
         lastRecentBlobLimit = limit

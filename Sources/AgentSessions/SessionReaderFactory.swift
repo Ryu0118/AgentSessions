@@ -12,6 +12,8 @@ public enum SessionReaderFactory {
             CursorSessionReader(fileSystem: fileSystem, sqlite: sqlite),
             KimiCodeSessionReader(fileSystem: fileSystem),
             CopilotCLISessionReader(fileSystem: fileSystem),
+            ZCodeSessionReader(fileSystem: fileSystem, sqlite: sqlite),
+            DeepSeekHarnessSessionReader(fileSystem: fileSystem),
         ]
     }
 }

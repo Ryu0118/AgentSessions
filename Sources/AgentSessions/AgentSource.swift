@@ -7,4 +7,6 @@ public enum AgentSource: String, Codable, CaseIterable, Sendable {
     case cursor
     case kimiCode = "kimi-code"
     case copilotCLI = "copilot-cli"
+    case zcode
+    case deepseekHarness = "deepseek-harness"
 }

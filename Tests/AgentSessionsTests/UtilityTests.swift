@@ -140,6 +140,16 @@ func kimiCodeAgentSourceRawValue() {
     #expect(AgentSource.allCases.contains(.kimiCode))
 }
 
+@Test("zcode and deepseek-harness AgentSource round-trip rawValues")
+func zcodeAndDeepSeekHarnessAgentSourceRawValues() {
+    #expect(AgentSource.zcode.rawValue == "zcode")
+    #expect(AgentSource(rawValue: "zcode") == .zcode)
+    #expect(AgentSource.deepseekHarness.rawValue == "deepseek-harness")
+    #expect(AgentSource(rawValue: "deepseek-harness") == .deepseekHarness)
+    #expect(AgentSource.allCases.contains(.zcode))
+    #expect(AgentSource.allCases.contains(.deepseekHarness))
+}
+
 @Test("DateUtils converts epoch milliseconds to Date")
 func epochMillisConversion() {
     let date = DateUtils.date(fromEpochMillis: 1_784_512_258_248)

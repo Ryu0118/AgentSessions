@@ -1,25 +1,13 @@
 import Foundation
 
-/// Decompresses zstd payloads. Abstracted so readers can be tested without the `zstd` binary.
-protocol ZstdDecompressing: Sendable {
-    func decompress(_ data: Data) throws -> Data
-}
-
 /// Default implementation backed by the system `zstd` CLI.
 ///
 /// Uses files instead of pipes for input, output and stderr, so large payloads cannot
 /// deadlock on a full pipe buffer while the process is still running.
 struct SystemZstdDecompressor: ZstdDecompressing {
-    private static let toolName = "zstd"
-    private static let fixedCandidates = [
-        "/opt/homebrew/bin/zstd",
-        "/usr/local/bin/zstd",
-        "/usr/bin/zstd",
-    ]
-
     func decompress(_ data: Data) throws -> Data {
-        guard let zstdPath = Self.resolveZstdPath() else {
-            throw SessionReaderError.decompressorUnavailable(tool: Self.toolName)
+        guard let zstdPath = ZstdExecutableLocator.locate() else {
+            throw SessionReaderError.decompressorUnavailable(tool: ZstdExecutableLocator.toolName)
         }
         return try Self.withTemporaryDirectory { directory in
             let inputURL = directory.appendingPathComponent("input")
@@ -29,15 +17,6 @@ struct SystemZstdDecompressor: ZstdDecompressing {
             try Self.runZstd(at: zstdPath, input: inputURL, output: outputURL, stderr: stderrURL)
             return try Data(contentsOf: outputURL)
         }
-    }
-
-    /// Scans `PATH` first, then well-known install locations.
-    private static func resolveZstdPath() -> String? {
-        let pathDirectories = (ProcessInfo.processInfo.environment["PATH"] ?? "")
-            .split(separator: ":")
-            .map(String.init)
-        let candidates = pathDirectories.map { "\($0)/\(toolName)" } + fixedCandidates
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     /// Creates a private (0o700) scratch directory and removes it after `body` returns.
@@ -55,6 +34,7 @@ struct SystemZstdDecompressor: ZstdDecompressing {
     }
 
     private static func runZstd(at path: String, input: URL, output: URL, stderr: URL) throws {
+        let toolName = ZstdExecutableLocator.toolName
         guard FileManager.default.createFile(
             atPath: stderr.path,
             contents: nil,

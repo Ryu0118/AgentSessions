@@ -2,6 +2,15 @@
 import Foundation
 import Testing
 
+/// Returns canned plain bytes regardless of input, so tests never need the `zstd` binary.
+private struct StubDecompressor: ZstdDecompressing {
+    let result: Result<Data, SessionReaderError>
+
+    func decompress(_ data: Data) throws -> Data {
+        try result.get()
+    }
+}
+
 struct DeepSeekHarnessSessionReaderTests {
     private struct Fixture {
         let fileSystem = MockFileManager()
@@ -9,8 +18,10 @@ struct DeepSeekHarnessSessionReaderTests {
         let sessionID = "session-aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
         let projectPath = "/mock/dshproject"
         let sessionFile: URL
+        let jsonl: String
+        var decompressorResult: Result<Data, SessionReaderError> = .success(Data())
 
-        init() throws {
+        init(decompressorResult: Result<Data, SessionReaderError>? = nil) throws {
             fileSystem.homeDirectoryForCurrentUser = home
             let encoded = DeepSeekHarnessSessionReader.encodedWorkspaceDirectory(for: projectPath)
             let sessionsRoot = home.appendingPathComponent(".dsh/sessions")
@@ -30,13 +41,20 @@ struct DeepSeekHarnessSessionReaderTests {
             {"type":"user/message","seq":3,"time":1710000003000,"data":{"content":[{"type":"text","text":"Follow-up"}],"role":"user","id":"u2"},"surfaceOp":"append"}
             {"type":"assistant/message","seq":4,"time":1710000004000,"data":{"turn":2,"step":1,"message":{"role":"assistant","content":[{"type":"text","text":"Second reply"}]}}}
             """
-            let compressed = try ZstdCodec.compress(Data(jsonl.utf8))
+            self.jsonl = jsonl
+            self.decompressorResult = decompressorResult ?? .success(Data(jsonl.utf8))
+            // Placeholder bytes: the stub decompressor ignores them.
+            let compressed = Data("zstd-placeholder".utf8)
             fileSystem.files[sessionFile.path] = compressed
             fileSystem.fileAttributes[sessionFile.path] = [.size: compressed.count]
         }
 
         func reader() -> DeepSeekHarnessSessionReader {
-            DeepSeekHarnessSessionReader(fileSystem: fileSystem)
+            DeepSeekHarnessSessionReader(
+                fileSystem: fileSystem,
+                baseDir: nil,
+                decompressor: StubDecompressor(result: decompressorResult)
+            )
         }
     }
 
@@ -87,5 +105,54 @@ struct DeepSeekHarnessSessionReaderTests {
             "Follow-up",
             "Second reply",
         ])
+    }
+
+    @Test("missing zstd surfaces an actionable decompressorUnavailable error")
+    func missingDecompressor() async throws {
+        let fixture = try Fixture(decompressorResult: .failure(.decompressorUnavailable(tool: "zstd")))
+        do {
+            _ = try await fixture.reader().loadSession(id: fixture.sessionID)
+            Issue.record("expected decompressorUnavailable")
+        } catch let error as SessionReaderError {
+            guard case .decompressorUnavailable(let tool) = error else {
+                Issue.record("wrong case: \(error)")
+                return
+            }
+            #expect(tool == "zstd")
+            let message = try #require(error.errorDescription)
+            #expect(message.contains("brew install zstd"))
+            #expect(message.contains("apt-get install zstd"))
+            #expect(message.contains("dnf install zstd"))
+            #expect(message.contains("not a corrupt session file"))
+            #expect(message.contains("listing sessions still works"))
+        }
+    }
+
+    @Test("decompression failure includes exit status and stderr")
+    func decompressionFailureMessage() async throws {
+        let failure = SessionReaderError.decompressionFailed(
+            tool: "zstd",
+            detail: "exit status 1, stderr: unknown header"
+        )
+        let fixture = try Fixture(decompressorResult: .failure(failure))
+        do {
+            _ = try await fixture.reader().loadSession(id: fixture.sessionID)
+            Issue.record("expected decompressionFailed")
+        } catch let error as SessionReaderError {
+            guard case .decompressionFailed = error else {
+                Issue.record("wrong case: \(error)")
+                return
+            }
+            let message = try #require(error.errorDescription)
+            #expect(message.contains("exit status 1"))
+            #expect(message.contains("unknown header"))
+        }
+    }
+
+    @Test("listing never invokes the decompressor")
+    func listDoesNotDecompress() async throws {
+        let fixture = try Fixture(decompressorResult: .failure(.decompressorUnavailable(tool: "zstd")))
+        let summaries = try await fixture.reader().listSessions()
+        #expect(summaries.count == 1)
     }
 }
